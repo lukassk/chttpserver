@@ -1,6 +1,6 @@
 BINARY=main
-CODEDIRS=.
-INCDIRS=.
+CODEDIRS=. ./src
+INCDIRS=. ./include
 
 CC=gcc
 OPT=-O0
