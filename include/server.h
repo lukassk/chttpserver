@@ -1,11 +1,10 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-typedef
-struct chttpserver {
+typedef struct {
     int domain;
-} chttpserver;
+} chttp_server;
 
-chttpserver create_chttpserver(int);
+chttp_server chttp_server_construct(int);
 
 #endif // SERVER_H

@@ -1,7 +1,7 @@
 #include "server.h"
 
-chttpserver create_chttpserver(int domain) {
-    chttpserver server;
+chttp_server chttp_server_construct(int domain) {
+    chttp_server server;
     
     server.domain = domain;
 
