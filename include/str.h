@@ -14,6 +14,13 @@ chttp_str_create(
 );
 
 chttp_str
+chttp_str_sub(
+    char *ptr,
+    int start,
+    int length
+);
+
+chttp_str
 chttp_str_from_decimal(
     int decimal
 );

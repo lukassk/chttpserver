@@ -80,7 +80,7 @@ chttp_server_launch(
             // although we cannot close the connection immediately cause some
             // packets might still be in transit and we don't want to send an
             // RST packet before the last one arrives
-            sleep(1);
+            usleep(100);
             close(new_socket);
         }
     }
@@ -99,20 +99,21 @@ chttp_server_parse_request(
     int fd
 ) {
     char buffer[CHTTP_REQUEST_BUFFER_SIZE];
-    char a, b, c; // temporary characters for comparisons
-    int i; // iterators
+    char a, b, c; // temporary characters
+    int i, length; // temporary integers
+    char* buffer_pos = buffer;
 
     // int flag_incorrect_method = 0,
     //     flag_incorrect_path = 0,
     //     flag_incorrect_protocol = 0,
-        int flag_dont_continue = 0;
+    int flag_dont_continue = 0;
 
     enum chttp_request_methods method = CHTTP_REQUEST_METHOD_UNDEFINED;
 
     // parsing determining the http request method from socket
     // doing it this way will allow the sPonGebOB casing in the method,
     // not that it's useful but in a well optimised form for that
-    read(fd, buffer, 3);
+    read(fd, buffer, CHTTP_REQUEST_BUFFER_SIZE);
     a = buffer[0];
     b = buffer[1];
     c = buffer[2];
@@ -121,10 +122,10 @@ chttp_server_parse_request(
         (b == 'e' || b == 'E') &&
         (c == 't' || c == 'T')
     ) {
-        read(fd, buffer, 1);
-        a = buffer[0];
+        a = buffer[3];
         if (a == ' ') {
             method = CHTTP_REQUEST_METHOD_GET;
+            buffer_pos += 4;
         }
     }
     else if (a == 'p' || a == 'P') {
@@ -134,13 +135,12 @@ chttp_server_parse_request(
             (c == 's' || c == 'S')
         ) {
             // POS
-            read(fd, buffer, 1);
-            a = buffer[0];
+            a = buffer[3];
             if (a == 't' || a == 'T') {
-                read(fd, buffer, 1);
-                a = buffer[0];
+                a = buffer[4];
                 if (a == ' ') {
                     method = CHTTP_REQUEST_METHOD_POST;
+                    buffer_pos += 5;
                 }
             }
         }
@@ -149,10 +149,10 @@ chttp_server_parse_request(
             (c == 't' || c == 'T')
         ) {
             // PUT
-            read(fd, buffer, 1);
-            a = buffer[0];
+            a = buffer[3];
             if (a == ' ') {
                 method = CHTTP_REQUEST_METHOD_PUT;
+                buffer_pos += 4;
             }
         }
 
@@ -164,20 +164,18 @@ chttp_server_parse_request(
             (c == 'l' || c == 'L')
         ) {
             // DEL
-            // all is fine but we need more bytes to confirm
-            read(fd, buffer, 3);
-            a = buffer[0];
-            b = buffer[1];
-            c = buffer[2];
+            a = buffer[3];
+            b = buffer[4];
+            c = buffer[5];
             if (
                 (a == 'e' || a == 'E') &&
                 (b == 't' || b == 'T') &&
                 (c == 'e' || c == 'E')
             ) {
-                read(fd, buffer, 1);
-                a = buffer[0];
+                a = buffer[6];
                 if (a == ' ') {
                     method = CHTTP_REQUEST_METHOD_DELETE;
+                    buffer_pos += 7;
                 }
             }
         }
@@ -194,17 +192,20 @@ chttp_server_parse_request(
         return req;
     }
 
-    i = 0;
+    // cut the path and move pointer forward
+    i = length = 0;
     while (1) {
-        read(fd, buffer + i, 1);
-        a = buffer[i];
+        a = *(buffer_pos + i);
         if (a == ' ') {
             if (i > 0) {
-                strncpy(req.path, buffer, min(i, CHTTP_REQUEST_PATH_SIZE - 1));
-                req.path[min(i, CHTTP_REQUEST_PATH_SIZE - 1)] = 0;
+                length = min(i, CHTTP_REQUEST_PATH_SIZE - 1);
+                strncpy(req.path, buffer_pos, length);
+                req.path[length] = 0;
             }
+            ++length;
+            buffer_pos += length;
             break;
-        } else if (a == 0 || a == '\n') {
+        } else if (a == 0 || a == '\n' || a == '\r') {
             // shit is on fire
             // flag_incorrect_path = 1;
             flag_dont_continue = 1;
@@ -216,31 +217,25 @@ chttp_server_parse_request(
     if (flag_dont_continue) {
         return req;
     }
-    
-    buffer[i + 1] = 0;
-    a = buffer[0];
-    if (a != '/') {
-        // flag_incorrect_path = 1;
-        flag_dont_continue = 1;
+
+    while (*buffer_pos == '\n' || *buffer_pos == '\r') {
+        ++buffer_pos;
     }
 
-    if (flag_dont_continue) {
-        return req;
-    }
-
-    i = 0;
+    i = length = 0;
     while (1) {
-        read(fd, buffer + i, 1);
-        a = buffer[i];
+        a = *(buffer_pos + i);
         if (a == '\n' || a == '\r') {
             if (i > 0) {
+                length = min(i, CHTTP_REQUEST_PROTOCOL_SIZE - 1);
                 strncpy(
                     req.protocol,
                     buffer,
-                    min(i, CHTTP_REQUEST_PROTOCOL_SIZE - 1)
+                    length
                 );
-                req.protocol[min(i, CHTTP_REQUEST_PROTOCOL_SIZE - 1)] = 0;
+                req.protocol[length] = 0;
             }
+            buffer_pos += length;
             break;
         } else if (a == 0) {
             // flag_incorrect_protocol = 1;
@@ -248,6 +243,50 @@ chttp_server_parse_request(
             break;
         }
         ++i;
+    }
+
+    char line[256];
+
+    while (buffer_pos[0] == '\n' || buffer_pos[0] == '\r') {
+        ++buffer_pos;
+    }
+
+    chttp_header *new_header;
+    char *colon;
+    int colon_pos;
+    while (sscanf(buffer_pos, "%255[^\n\r]s", line) != -1) {
+        new_header = chttp_header_alloc();
+        colon_pos = -1;
+        length = strlen(line);
+        colon = strstr(line, ":");
+        if (colon != NULL) {
+            colon_pos = colon - line;
+        }
+
+        if (colon_pos != -1) {
+            new_header->key = chttp_str_sub(line, 0, colon_pos);
+            new_header->value = chttp_str_sub(
+                line,
+                colon_pos + 2,
+                length - colon_pos - 1
+            );
+        } else {
+            chttp_header_free(new_header);
+            new_header = NULL;
+        }
+
+        buffer_pos += length;
+        while (*buffer_pos == '\n' || *buffer_pos == '\r') {
+            ++buffer_pos;
+        }
+
+        if (new_header) {
+            printf(
+                "%s: %s\n",
+                new_header->key.content,
+                new_header->value.content
+            );
+        }
     }
 
     return req;
