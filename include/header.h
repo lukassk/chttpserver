@@ -26,4 +26,9 @@ chttp_header_construct(
     char *value
 );
 
+void
+chttp_header_free(
+    chttp_header *header
+);
+
 #endif
