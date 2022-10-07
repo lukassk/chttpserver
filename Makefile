@@ -20,7 +20,7 @@ $(BINARY): $(OBJECTS)
 	$(CC) $(CFLAGS) -c -o $@ $^
 
 clean:
-	rm -rf $(BINARY) **/*.{o,d}
+	rm -rf $(BINARY) **/*.{o,d} *.{o,d}
 
 run: all
 	./main
