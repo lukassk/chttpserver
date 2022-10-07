@@ -28,6 +28,7 @@ chttp_server_construct(
     server.address.sin_addr.s_addr = htonl(interface);
 
     server.socket = socket(domain, service, protocol);
+    server.signal = 0;
 
     if (server.socket == 0) {
         perror("Failed to initialize socket\n");
@@ -64,8 +65,7 @@ chttp_server_launch(
     chttp_response res;
 
     if (server) {
-        // TODO: eradicate the endless loop, implement signaling from somewhere
-        while (1) {
+        while (server->signal == 0) {
             new_socket = accept(
                 server->socket,
                 (struct sockaddr *)&server->address,

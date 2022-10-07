@@ -21,6 +21,7 @@ struct chttp_server {
     struct sockaddr_in address;
 
     int socket;
+    int signal;
 };
 
 typedef struct chttp_server chttp_server;

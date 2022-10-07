@@ -7,14 +7,11 @@
 
 #define DEBUG 1
 
-int last_sig = 0;
+chttp_server server;
 
 void sig_handler(int sig)
 {
-    last_sig = sig;
-
-    // exit is not a good solution, might interrupt some process
-    exit(1);
+    server.signal = sig;
 }
 
 void print_runtime_arguments(int argc, char** argv)
@@ -35,11 +32,9 @@ int main(int argc, char** argv)
 
     signal(SIGINT, sig_handler);
 
-    chttp_server s = chttp_server_construct(AF_INET, SOCK_STREAM, 0, INADDR_ANY, 8000, 10);
-
-    chttp_server_launch(&s);
-    
-    chttp_server_close(&s);
+    server = chttp_server_construct(AF_INET, SOCK_STREAM, 0, INADDR_ANY, 8000, 10);
+    chttp_server_launch(&server);
+    chttp_server_close(&server);
 
     return 0;
 }
